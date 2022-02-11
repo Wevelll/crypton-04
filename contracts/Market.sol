@@ -15,6 +15,11 @@ contract Market is Ownable, IERC721Receiver {
     Counters.Counter public auctionIDs;
     uint256 public deadline;
 
+    event ItemSold(address indexed seller, address indexed buyer, uint256 price);
+    event ListingState(uint indexed listingID, state listingState);
+    event AuctionState(uint indexed auctionID, uint256 price, state auctionState);
+    event Bid(address indexed bidder, uint auctionID, uint256 price);
+
     enum state {
         ACTIVE,
         FINISHED,
@@ -80,6 +85,8 @@ contract Market is Ownable, IERC721Receiver {
         listingIDs.increment();
         listingID = listingIDs.current();
         listings[listingID] = listing(msg.sender, _token, _tokenID, _price, state.ACTIVE);
+
+        emit ListingState(listingID, state.ACTIVE);
     }
 
     //Функция createItem() - создание нового предмета, обращается к контракту NFT и вызывает функцию mint.
@@ -88,6 +95,8 @@ contract Market is Ownable, IERC721Receiver {
         listingIDs.increment();
         listingID = listingIDs.current();
         listings[listingID] = listing(msg.sender, _token, id, _price, state.ACTIVE);
+
+        emit ListingState(listingID, state.ACTIVE);
     }
 
     //Функция cancel() - отмена продажи выставленного предмета
@@ -96,6 +105,8 @@ contract Market is Ownable, IERC721Receiver {
         require(l.State != state.CANCELLED, "Already cancelled!");
         l.State = state.CANCELLED;
         ERC721(l.token).transferFrom(address(this), l.seller, l.id);
+
+        emit ListingState(_listingID, state.CANCELLED);
     }
 
     //Функция buyItem() - покупка предмета.
@@ -106,6 +117,9 @@ contract Market is Ownable, IERC721Receiver {
         l.State = state.FINISHED;
         ERC721(l.token).transferFrom(address(this), msg.sender, l.id);
         payable(l.seller).call{value: l.price}("");
+
+        emit ItemSold(l.seller, msg.sender, l.price);
+        emit ListingState(l.id, state.FINISHED);
     }
 
 
@@ -118,6 +132,8 @@ contract Market is Ownable, IERC721Receiver {
         auctionID = auctionIDs.current();
         listing memory l = listing(msg.sender, _token, _tokenID, _price, state.ACTIVE);
         auctions[auctionID] = auction(l, address(0), 0, block.timestamp, block.timestamp + deadline);
+
+        emit AuctionState(auctionID, _price, state.ACTIVE);
     }
 
     //Функция finishAuction() - завершить аукцион и отправить НФТ победителю
@@ -128,6 +144,9 @@ contract Market is Ownable, IERC721Receiver {
         a.Listing.State = state.FINISHED;
         ERC721(a.Listing.token).transferFrom(address(this), a.topBidder, a.Listing.id);
         payable(a.Listing.seller).call{value: a.Listing.price}("");
+
+        emit ItemSold(a.Listing.seller, a.topBidder, a.Listing.price);
+        emit AuctionState(a.Listing.id, a.Listing.price, state.FINISHED);
     }
 
     //Функция cancelAuction() - отменить аукцион
@@ -137,6 +156,8 @@ contract Market is Ownable, IERC721Receiver {
         a.Listing.State = state.CANCELLED;
         ERC721(a.Listing.token).transferFrom(address(this), a.Listing.seller, a.Listing.id);
         payable(a.topBidder).call{value: a.Listing.price}("");
+
+        emit AuctionState(a.Listing.id, a.Listing.price, state.CANCELLED);
     }
 
     //Функция makeBid() - сделать ставку на предмет аукциона с определенным id.
@@ -148,5 +169,7 @@ contract Market is Ownable, IERC721Receiver {
         payable(a.topBidder).call{value: a.Listing.price}("");
         a.topBidder = msg.sender;
         a.Listing.price = msg.value;
+
+        emit Bid(msg.sender, _auctionID, msg.value);
     }
 }
